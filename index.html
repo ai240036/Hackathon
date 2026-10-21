@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Bus Stop Display - Township of Tomorrow</title>
+
+  <!-- Leaflet CSS for Map Styling -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    body {
+      display: flex;
+      height: 100vh;
+      background-color: #0f172a;
+      color: #f8fafc;
+      overflow: hidden;
+    }
+
+    /* Left Kiosk Dashboard Panel */
+    #dashboard {
+      width: 380px;
+      background: #1e293b;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      box-shadow: 4px 0 15px rgba(0, 0, 0, 0.4);
+      z-index: 1000;
+    }
+
+    .header {
+      border-bottom: 2px solid #334155;
+      padding-bottom: 12px;
+    }
+
+    .header h1 {
+      font-size: 1.4rem;
+      color: #38bdf8;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .header p {
+      font-size: 0.85rem;
+      color: #94a3b8;
+      margin-top: 4px;
+    }
+
+    /* Primary Active Arrival Card */
+    .hero-card {
+      background: linear-gradient(135deg, #0284c7, #0369a1);
+      padding: 18px;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(2, 132, 199, 0.3);
+    }
+
+    .hero-card h2 {
+      font-size: 1.1rem;
+      color: #e0f2fe;
+    }
+
+    .eta-box {
+      margin: 12px 0;
+    }
+
+    .eta-time {
+      font-size: 2.8rem;
+      font-weight: 800;
+      color: #ffffff;
+      line-height: 1;
+    }
+
+    .eta-label {
+      font-size: 0.85rem;
+      color: #bae6fd;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .status-badge {
+      display: inline-block;
+      background: #22c55e;
+      color: #052e16;
+      font-weight: 700;
+      font-size: 0.75rem;
+      padding: 4px 10px;
+      border-radius: 20px;
+      text-transform: uppercase;
+    }
+
+    /* Metrics Section */
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .metric-card {
+      background: #334155;
+      padding: 12px;
+      border-radius: 8px;
+    }
+
+    .metric-card div {
+      font-size: 0.75rem;
+      color: #94a3b8;
+    }
+
+    .metric-card strong {
+      font-size: 1rem;
+      color: #f8fafc;
+      margin-top: 4px;
+      display: block;
+    }
+
+    /* Upcoming Schedule List */
+    .schedule-section h3 {
+      font-size: 0.95rem;
+      color: #cbd5e1;
+      margin-bottom: 10px;
+    }
+
+    .schedule-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 12px;
+      background: #0f172a;
+      border-radius: 6px;
+      margin-bottom: 8px;
+      font-size: 0.85rem;
+    }
+
+    /* Map Display Container */
+    #map {
+      flex-grow: 1;
+      height: 100%;
+    }
+
+    /* Leaflet Custom Marker Styling */
+    .bus-icon {
+      background: #ef4444;
+      border: 2px solid #ffffff;
+      border-radius: 50%;
+      box-shadow: 0 0 10px rgba(239, 68, 68, 0.8);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Kiosk Sidebar Display -->
+  <div id="dashboard">
+    <div class="header">
+      <h1>🚏 Smart Township Transit</h1>
+      <p>Bus Stop ID: <strong>ST-104 (Central Hub)</strong></p>
+    </div>
+
+    <!-- Live Tracked Bus Status -->
+    <div class="hero-card">
+      <span class="status-badge" id="bus-status">On Schedule</span>
+      <h2 style="margin-top: 8px;">Route 101 — City Loop</h2>
+      
+      <div class="eta-box">
+        <div class="eta-label">Estimated Arrival</div>
+        <div class="eta-time" id="eta-display">4 mins</div>
+      </div>
+
+      <p style="font-size: 0.8rem; color: #e0f2fe;" id="distance-display">Distance: 1.2 km away</p>
+    </div>
+
+    <!-- Live Telemetry / Crowd Monitoring -->
+    <div class="metrics-grid">
+      <div class="metric-card">
+        <div>Live Capacity</div>
+        <strong id="capacity-display">🟢 42% (Seats Free)</strong>
+      </div>
+      <div class="metric-card">
+        <div>Next Departure</div>
+        <strong>10:15 AM</strong>
+      </div>
+    </div>
+
+    <!-- Upcoming Schedule Table -->
+    <div class="schedule-section">
+      <h3>Upcoming Arrivals</h3>
+      <div class="schedule-item">
+        <span><strong>Route 204</strong> — Express Line</span>
+        <span style="color: #38bdf8; font-weight: bold;">12 mins</span>
+      </div>
+      <div class="schedule-item">
+        <span><strong>Route 101</strong> — City Loop</span>
+        <span style="color: #38bdf8; font-weight: bold;">25 mins</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Map Canvas -->
+  <div id="map"></div>
+
+  <!-- Leaflet Map JS Library -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <script>
+    // 1. Initialize Map centered on Kuala Lumpur area coordinates
+    const map = L.map('map', { zoomControl: false }).setView([3.1390, 101.6869], 15);
+
+    // 2. Load dark map tiles for futuristic smart-city styling
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      maxZoom: 19,
+      attribution: '© OpenStreetMap contributors © CARTO'
+    }).addTo(map);
+
+    // 3. Define the predefined bus route coordinates path leading to bus stop
+    const busPath = [
+      [3.1280, 101.6780],
+      [3.1310, 101.6810],
+      [3.1340, 101.6835],
+      [3.1370, 101.6855],
+      [3.1390, 101.6869] // Bus Stop Location
+    ];
+
+    // Draw Route Polyline on Map
+    const routeLine = L.polyline(busPath, { color: '#0284c7', weight: 5, opacity: 0.7 }).addTo(map);
+
+    // 4. Mark the Smart Bus Stop Position
+    const stopMarker = L.marker([3.1390, 101.6869]).addTo(map)
+      .bindPopup("<b>Smart Bus Stop #ST-104</b><br>You are here.")
+      .openPopup();
+
+    // 5. Create Custom Red Bus Icon Marker
+    const busIcon = L.divIcon({ className: 'bus-icon', iconSize: [16, 16] });
+    let currentStep = 0;
+    const busMarker = L.marker(busPath[0], { icon: busIcon }).addTo(map);
+
+    // 6. Simulate Real-Time GPS Tracking Updates
+    setInterval(() => {
+      if (currentStep < busPath.length - 1) {
+        currentStep++;
+        const nextPos = busPath[currentStep];
+        
+        // Move Bus Marker along the route
+        busMarker.setLatLng(nextPos);
+
+        // Update Dynamic UI Data based on remaining steps
+        const remainingSteps = busPath.length - 1 - currentStep;
+        const etaMinutes = remainingSteps * 1;
+        const distanceKm = (remainingSteps * 0.4).toFixed(1);
+
+        const etaDisplay = document.getElementById('eta-display');
+        const distanceDisplay = document.getElementById('distance-display');
+        const statusBadge = document.getElementById('bus-status');
+
+        if (remainingSteps > 0) {
+          etaDisplay.innerText = `${etaMinutes} min${etaMinutes > 1 ? 's' : ''}`;
+          distanceDisplay.innerText = `Distance: ${distanceKm} km away`;
+        } else {
+          etaDisplay.innerText = "Arriving!";
+          distanceDisplay.innerText = "Bus at station";
+          statusBadge.innerText = "Boarding Now";
+          statusBadge.style.background = "#38bdf8";
+        }
+      }
+    }, 4000); // Updates GPS position every 4 seconds
+  </script>
+</body>
+</html><!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Bus Stop Display - Township of Tomorrow</title>
+
+  <!-- Leaflet CSS for Map Styling -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    body {
+      display: flex;
+      height: 100vh;
+      background-color: #0f172a;
+      color: #f8fafc;
+      overflow: hidden;
+    }
+
+    /* Left Kiosk Dashboard Panel */
+    #dashboard {
+      width: 380px;
+      background: #1e293b;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      box-shadow: 4px 0 15px rgba(0, 0, 0, 0.4);
+      z-index: 1000;
+    }
+
+    .header {
+      border-bottom: 2px solid #334155;
+      padding-bottom: 12px;
+    }
+
+    .header h1 {
+      font-size: 1.4rem;
+      color: #38bdf8;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .header p {
+      font-size: 0.85rem;
+      color: #94a3b8;
+      margin-top: 4px;
+    }
+
+    /* Primary Active Arrival Card */
+    .hero-card {
+      background: linear-gradient(135deg, #0284c7, #0369a1);
+      padding: 18px;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(2, 132, 199, 0.3);
+    }
+
+    .hero-card h2 {
+      font-size: 1.1rem;
+      color: #e0f2fe;
+    }
+
+    .eta-box {
+      margin: 12px 0;
+    }
+
+    .eta-time {
+      font-size: 2.8rem;
+      font-weight: 800;
+      color: #ffffff;
+      line-height: 1;
+    }
+
+    .eta-label {
+      font-size: 0.85rem;
+      color: #bae6fd;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .status-badge {
+      display: inline-block;
+      background: #22c55e;
+      color: #052e16;
+      font-weight: 700;
+      font-size: 0.75rem;
+      padding: 4px 10px;
+      border-radius: 20px;
+      text-transform: uppercase;
+    }
+
+    /* Metrics Section */
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .metric-card {
+      background: #334155;
+      padding: 12px;
+      border-radius: 8px;
+    }
+
+    .metric-card div {
+      font-size: 0.75rem;
+      color: #94a3b8;
+    }
+
+    .metric-card strong {
+      font-size: 1rem;
+      color: #f8fafc;
+      margin-top: 4px;
+      display: block;
+    }
+
+    /* Upcoming Schedule List */
+    .schedule-section h3 {
+      font-size: 0.95rem;
+      color: #cbd5e1;
+      margin-bottom: 10px;
+    }
+
+    .schedule-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 12px;
+      background: #0f172a;
+      border-radius: 6px;
+      margin-bottom: 8px;
+      font-size: 0.85rem;
+    }
+
+    /* Map Display Container */
+    #map {
+      flex-grow: 1;
+      height: 100%;
+    }
+
+    /* Leaflet Custom Marker Styling */
+    .bus-icon {
+      background: #ef4444;
+      border: 2px solid #ffffff;
+      border-radius: 50%;
+      box-shadow: 0 0 10px rgba(239, 68, 68, 0.8);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Kiosk Sidebar Display -->
+  <div id="dashboard">
+    <div class="header">
+      <h1>🚏 Smart Township Transit</h1>
+      <p>Bus Stop ID: <strong>ST-104 (Central Hub)</strong></p>
+    </div>
+
+    <!-- Live Tracked Bus Status -->
+    <div class="hero-card">
+      <span class="status-badge" id="bus-status">On Schedule</span>
+      <h2 style="margin-top: 8px;">Route 101 — City Loop</h2>
+      
+      <div class="eta-box">
+        <div class="eta-label">Estimated Arrival</div>
+        <div class="eta-time" id="eta-display">4 mins</div>
+      </div>
+
+      <p style="font-size: 0.8rem; color: #e0f2fe;" id="distance-display">Distance: 1.2 km away</p>
+    </div>
+
+    <!-- Live Telemetry / Crowd Monitoring -->
+    <div class="metrics-grid">
+      <div class="metric-card">
+        <div>Live Capacity</div>
+        <strong id="capacity-display">🟢 42% (Seats Free)</strong>
+      </div>
+      <div class="metric-card">
+        <div>Next Departure</div>
+        <strong>10:15 AM</strong>
+      </div>
+    </div>
+
+    <!-- Upcoming Schedule Table -->
+    <div class="schedule-section">
+      <h3>Upcoming Arrivals</h3>
+      <div class="schedule-item">
+        <span><strong>Route 204</strong> — Express Line</span>
+        <span style="color: #38bdf8; font-weight: bold;">12 mins</span>
+      </div>
+      <div class="schedule-item">
+        <span><strong>Route 101</strong> — City Loop</span>
+        <span style="color: #38bdf8; font-weight: bold;">25 mins</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Map Canvas -->
+  <div id="map"></div>
+
+  <!-- Leaflet Map JS Library -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <script>
+    // 1. Initialize Map centered on Kuala Lumpur area coordinates
+    const map = L.map('map', { zoomControl: false }).setView([3.1390, 101.6869], 15);
+
+    // 2. Load dark map tiles for futuristic smart-city styling
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      maxZoom: 19,
+      attribution: '© OpenStreetMap contributors © CARTO'
+    }).addTo(map);
+
+    // 3. Define the predefined bus route coordinates path leading to bus stop
+    const busPath = [
+      [3.1280, 101.6780],
+      [3.1310, 101.6810],
+      [3.1340, 101.6835],
+      [3.1370, 101.6855],
+      [3.1390, 101.6869] // Bus Stop Location
+    ];
+
+    // Draw Route Polyline on Map
+    const routeLine = L.polyline(busPath, { color: '#0284c7', weight: 5, opacity: 0.7 }).addTo(map);
+
+    // 4. Mark the Smart Bus Stop Position
+    const stopMarker = L.marker([3.1390, 101.6869]).addTo(map)
+      .bindPopup("<b>Smart Bus Stop #ST-104</b><br>You are here.")
+      .openPopup();
+
+    // 5. Create Custom Red Bus Icon Marker
+    const busIcon = L.divIcon({ className: 'bus-icon', iconSize: [16, 16] });
+    let currentStep = 0;
+    const busMarker = L.marker(busPath[0], { icon: busIcon }).addTo(map);
+
+    // 6. Simulate Real-Time GPS Tracking Updates
+    setInterval(() => {
+      if (currentStep < busPath.length - 1) {
+        currentStep++;
+        const nextPos = busPath[currentStep];
+        
+        // Move Bus Marker along the route
+        busMarker.setLatLng(nextPos);
+
+        // Update Dynamic UI Data based on remaining steps
+        const remainingSteps = busPath.length - 1 - currentStep;
+        const etaMinutes = remainingSteps * 1;
+        const distanceKm = (remainingSteps * 0.4).toFixed(1);
+
+        const etaDisplay = document.getElementById('eta-display');
+        const distanceDisplay = document.getElementById('distance-display');
+        const statusBadge = document.getElementById('bus-status');
+
+        if (remainingSteps > 0) {
+          etaDisplay.innerText = `${etaMinutes} min${etaMinutes > 1 ? 's' : ''}`;
+          distanceDisplay.innerText = `Distance: ${distanceKm} km away`;
+        } else {
+          etaDisplay.innerText = "Arriving!";
+          distanceDisplay.innerText = "Bus at station";
+          statusBadge.innerText = "Boarding Now";
+          statusBadge.style.background = "#38bdf8";
+        }
+      }
+    }, 4000); // Updates GPS position every 4 seconds
+  </script>
+</body>
+</html>
